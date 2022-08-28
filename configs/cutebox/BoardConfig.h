@@ -43,4 +43,7 @@
 #define I2C_BLOCK i2c0
 #define I2C_SPEED 400000
 
+#define ANALOG_ADC_VRY -1
+#define ANALOG_ADC_VRX -1
+
 #endif
