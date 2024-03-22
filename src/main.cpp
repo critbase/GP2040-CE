@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: MIT
- * SPDX-FileCopyrightText: Copyright (c) 2021 Jason Skuby (mytechtoybox.com)
+ * SPDX-FileCopyrightText: Copyright (c) 2024 OpenStickCommunity (gp2040-ce.info)
  */
 
 // Pi Pico includes
@@ -9,6 +9,16 @@
 // GP2040 includes
 #include "gp2040.h"
 #include "gp2040aux.h"
+
+#include <cstdlib>
+
+// Custom implementation of __gnu_cxx::__verbose_terminate_handler() to reduce binary size
+namespace __gnu_cxx {
+void __verbose_terminate_handler()
+{
+	abort();
+}
+}
 
 // Launch our second core with additional modules loaded in
 void core1() {

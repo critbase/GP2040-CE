@@ -5,7 +5,7 @@
 
 #include "FlashPROM.h"
 
-uint8_t FlashPROM::cache[EEPROM_SIZE_BYTES] = { };
+uint8_t FlashPROM::writeCache[EEPROM_SIZE_BYTES];
 volatile static alarm_id_t flashWriteAlarm = 0;
 volatile static spin_lock_t *flashLock = nullptr;
 
@@ -20,6 +20,7 @@ int64_t writeToFlash(alarm_id_t id, void *flashCache)
 	flash_range_program((intptr_t)EEPROM_ADDRESS_START - (intptr_t)XIP_BASE, reinterpret_cast<uint8_t *>(flashCache), EEPROM_SIZE_BYTES);
 
 	flashWriteAlarm = 0;
+
 	multicore_lockout_end_blocking();
 	spin_unlock(flashLock, interrupts);
 
@@ -31,22 +32,7 @@ void FlashPROM::start()
 	if (flashLock == nullptr)
 		flashLock = spin_lock_instance(spin_lock_claim_unused(true));
 
-	memcpy(cache, reinterpret_cast<uint8_t *>(EEPROM_ADDRESS_START), EEPROM_SIZE_BYTES);
-
-	// When flash is new/reset, all bits are set to 1.
-	// If all bits from the FlashPROM section are 1's then set to 0's.
-	bool reset = true;
-	for (int i = 0; i < EEPROM_SIZE_BYTES; i++)
-	{
-		if (cache[i] != 0xFF)
-		{
-			reset = false;
-			break;
-		}
-	}
-
-	if (reset)
-		this->reset();
+	memcpy(writeCache, reinterpret_cast<uint8_t *>(EEPROM_ADDRESS_START), EEPROM_SIZE_BYTES);
 }
 
 /* We don't have an actual EEPROM, so we need to be extra careful about minimizing writes. Instead
@@ -55,12 +41,13 @@ void FlashPROM::start()
 void FlashPROM::commit()
 {
 	while (is_spin_locked(flashLock));
-	cancel_alarm(flashWriteAlarm);
-	flashWriteAlarm = add_alarm_in_ms(EEPROM_WRITE_WAIT, writeToFlash, cache, true);
+	if (flashWriteAlarm != 0)
+		cancel_alarm(flashWriteAlarm);
+	flashWriteAlarm = add_alarm_in_ms(EEPROM_WRITE_WAIT, writeToFlash, writeCache, true);
 }
 
 void FlashPROM::reset()
 {
-	memset(cache, 0, EEPROM_SIZE_BYTES);
+	memset(writeCache, 0, EEPROM_SIZE_BYTES);
 	commit();
 }

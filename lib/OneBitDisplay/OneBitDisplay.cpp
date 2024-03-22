@@ -22,7 +22,6 @@
 #include <string.h>
 #include "pico/stdlib.h"
 
-#include "BitBang_I2C.h"
 #include "OneBitDisplay.h"
 // All of the drawing code is in here
 #include "obd.inl"
@@ -205,7 +204,7 @@ static void LCDPowerUp(OBDISP *pOBD)
 	memcpy(uc, s, iLen);
 
 	if (pOBD->iMOSIPin == 0xff)
-		spi_write_blocking(pOBD->bbi2c.picoSPI, s, iLen);
+		spi_write_blocking(pOBD->spi->getController(), s, iLen);
 	else
 		SPI_BitBang(pOBD, s, iLen, pOBD->iMOSIPin, pOBD->iCLKPin);
 
@@ -275,8 +274,8 @@ void obdSPIInit(OBDISP *pOBD, int iType, int iDC, int iCS, int iReset, int iMOSI
 		gpio_set_function(pOBD->iCLKPin, GPIO_FUNC_SPI);
 		gpio_set_function(pOBD->iMOSIPin, GPIO_FUNC_SPI);
 
-		spi_init(pOBD->bbi2c.picoSPI, 1000 * 1000);
-		spi_set_format(pOBD->bbi2c.picoSPI, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+		spi_init(pOBD->spi->getController(), 1000 * 1000);
+		spi_set_format(pOBD->spi->getController(), 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
 	}
 
 	pOBD->width = 128; // assume 128x64
@@ -373,12 +372,16 @@ void obdSPIInit(OBDISP *pOBD, int iType, int iDC, int iCS, int iReset, int iMOSI
 		}
 		if (bFlip) // rotate display 180
 		{
-			uc[0] = 0; // command
-			uc[1] = 0xa0;
-			_I2CWrite(pOBD, uc, 2);
-			uc[0] = 0;
-			uc[1] = 0xc0;
-			_I2CWrite(pOBD, uc, 2);
+			if (bFlip == FLIP_HORIZONTAL || bFlip == FLIP_BOTH) {
+				uc[0] = 0; // command
+				uc[1] = 0xa0;
+				_I2CWrite(pOBD, uc, 2);
+			}
+			if (bFlip == FLIP_VERTICAL || bFlip == FLIP_BOTH) {
+				uc[0] = 0;
+				uc[1] = 0xc0;
+				_I2CWrite(pOBD, uc, 2);
+			}
 		}
 	} // OLED
 	if (iType == LCD_UC1701 || iType == LCD_HX1230)
@@ -393,8 +396,12 @@ void obdSPIInit(OBDISP *pOBD, int iType, int iDC, int iCS, int iReset, int iMOSI
 		}
 		if (bFlip) // flip horizontal + vertical
 		{
-			obdWriteCommand(pOBD, 0xa1); // set SEG direction (A1 to flip horizontal)
-			obdWriteCommand(pOBD, cCOM); // set COM direction (C0 to flip vert)
+			if (bFlip == FLIP_HORIZONTAL || bFlip == FLIP_BOTH) {
+				obdWriteCommand(pOBD, 0xa1); // set SEG direction (A1 to flip horizontal)
+			}
+			if (bFlip == FLIP_VERTICAL || bFlip == FLIP_BOTH) {
+				obdWriteCommand(pOBD, cCOM); // set COM direction (C0 to flip vert)
+			}
 		}
 		if (bInvert)
 		{
@@ -413,8 +420,12 @@ void obdSPIInit(OBDISP *pOBD, int iType, int iDC, int iCS, int iReset, int iMOSI
 		obdWriteCommand(pOBD, 0xaf); // display enable
 		if (bFlip)                   // flip horizontal + vertical
 		{
-			obdWriteCommand(pOBD, 0xa1); // set SEG direction (A1 to flip horizontal)
-			obdWriteCommand(pOBD, 0xc2); // set COM direction (C0 to flip vert)
+			if (bFlip == FLIP_HORIZONTAL || bFlip == FLIP_BOTH) {
+				obdWriteCommand(pOBD, 0xa1); // set SEG direction (A1 to flip horizontal)
+			}
+			if (bFlip == FLIP_VERTICAL || bFlip == FLIP_BOTH) {
+				obdWriteCommand(pOBD, 0xc2); // set COM direction (C0 to flip vert)
+			}
 		}
 		if (bInvert)
 		{
@@ -426,7 +437,7 @@ void obdSPIInit(OBDISP *pOBD, int iType, int iDC, int iCS, int iReset, int iMOSI
 //
 // Initializes the OLED controller into "page mode"
 //
-int obdI2CInit(OBDISP *pOBD, int iType, int iAddr, int bFlip, int bInvert, int bWire, int sda, int scl, i2c_inst_t *picoI2C, int reset, int32_t iSpeed)
+int obdI2CInit(OBDISP *pOBD, int iType, int iAddr, int bFlip, int bInvert, int bWire, PeripheralI2C* i2cController, int reset)
 {
 	unsigned char uc[32];
 	uint8_t u8Len, *s;
@@ -437,13 +448,11 @@ int obdI2CInit(OBDISP *pOBD, int iType, int iAddr, int bFlip, int bInvert, int b
 	pOBD->flip = bFlip;
 	pOBD->invert = bInvert;
 	pOBD->wrap = 0; // default - disable text wrap
-	pOBD->bbi2c.iSDA = sda;
-	pOBD->bbi2c.iSCL = scl;
-	pOBD->bbi2c.picoI2C = picoI2C;
-	pOBD->bbi2c.bWire = bWire;
+    pOBD->i2c = i2cController;
+	pOBD->bWire = bWire;
 	pOBD->com_mode = COM_I2C; // communication mode
 
-	I2CInit(&pOBD->bbi2c, iSpeed); // on Linux, SDA = bus number, SCL = device address
+	//I2CInit(&pOBD->bbi2c, iSpeed); // on Linux, SDA = bus number, SCL = device address
 
 	// Reset it
 	if (reset != -1)
@@ -459,10 +468,10 @@ int obdI2CInit(OBDISP *pOBD, int iType, int iAddr, int bFlip, int bInvert, int b
 	// find the device address if requested
 	if (iAddr == -1 || iAddr == 0 || iAddr == 0xff) // find it
 	{
-		I2CTest(&pOBD->bbi2c, 0x3c);
-		if (I2CTest(&pOBD->bbi2c, 0x3c))
+		pOBD->i2c->test(0x3c);
+		if (pOBD->i2c->test(0x3c))
 			pOBD->oled_addr = 0x3c;
-		else if (I2CTest(&pOBD->bbi2c, 0x3d))
+		else if (pOBD->i2c->test(0x3d))
 			pOBD->oled_addr = 0x3d;
 		else
 			return rc; // no display found!
@@ -470,14 +479,14 @@ int obdI2CInit(OBDISP *pOBD, int iType, int iAddr, int bFlip, int bInvert, int b
 	else
 	{
 		pOBD->oled_addr = iAddr;
-		I2CTest(&pOBD->bbi2c, iAddr);
-		if (!I2CTest(&pOBD->bbi2c, iAddr))
+		pOBD->i2c->test(iAddr);
+		if (!pOBD->i2c->test(iAddr))
 			return rc; // no display found
 	}
 
 	// Detect the display controller (SSD1306, SH1107 or SH1106)
 	uint8_t u = 0;
-	I2CReadRegister(&pOBD->bbi2c, pOBD->oled_addr, 0x00, &u, 1); // read the status register
+	pOBD->i2c->readRegister(pOBD->oled_addr, 0x00, &u, 1); // read the status register
 	u &= 0x0f;                                                   // mask off power on/off bit
 	if ((u == 0x7 || u == 0xf) && pOBD->type == OLED_128x128)    // SH1107
 	{                                                            // A single SSD1306 display returned 7, so only act on it if the
@@ -534,10 +543,14 @@ int obdI2CInit(OBDISP *pOBD, int iType, int iAddr, int bFlip, int bInvert, int b
 	if (bFlip) // rotate display 180
 	{
 		uc[0] = 0; // command
-		uc[1] = 0xa0;
-		_I2CWrite(pOBD, uc, 2);
-		uc[1] = 0xc0;
-		_I2CWrite(pOBD, uc, 2);
+		if (bFlip == FLIP_HORIZONTAL || bFlip == FLIP_BOTH) {
+			uc[1] = 0xa0;
+			_I2CWrite(pOBD, uc, 2);
+		}
+		if (bFlip == FLIP_VERTICAL || bFlip == FLIP_BOTH) {
+			uc[1] = 0xc0;
+			_I2CWrite(pOBD, uc, 2);
+		}
 	}
 	pOBD->width = 128; // assume 128x64
 	pOBD->height = 64;

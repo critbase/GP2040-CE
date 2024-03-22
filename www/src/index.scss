@@ -1,9 +1,12 @@
 // Override default variables before the import
-$body-bg: #e9ecef;
 $primary: #495057;
 $danger: #7b2d26;
 
-@import '~bootstrap/scss/bootstrap';
+@import "~bootstrap/scss/bootstrap";
+
+:root {
+	--bs-primary-rgb: 20, 23, 30;
+}
 
 * {
 	font-size: 16px;
@@ -11,11 +14,12 @@ $danger: #7b2d26;
 
 body {
 	margin: 0;
-	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-		'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
+		"Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
 		sans-serif;
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
+	min-width: 880px;
 }
 
 h1 {
@@ -23,12 +27,24 @@ h1 {
 }
 
 code {
-	font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+	font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New",
+		monospace;
 }
 
 input.form-control {
 	:focus {
 		color: inherit;
+	}
+}
+
+button {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	flex: 0 0 auto;
+
+	svg {
+		transform: translateY(-0.125rem);
 	}
 }
 
@@ -49,4 +65,26 @@ input.form-control {
 .card-header {
 	background-color: $primary;
 	color: $white;
+}
+
+.popover {
+	position: fixed !important;
+	z-index: 2;
+
+	.cover {
+		position: fixed;
+		top: 0;
+		right: 0;
+		bottom: 0;
+		left: 0;
+	}
+}
+
+.button-group {
+	display: flex;
+	justify-content: flex-start;
+
+	button:not(:first-child) {
+		margin-left: 10px;
+	}
 }
